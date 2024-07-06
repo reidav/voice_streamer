@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Voice to Text</title>
+</head>
+<body>
+    <h1>Voice to Text</h1>
+    <select id="language" onchange="updateButtonLanguage()">
+        <option value="en-US">English</option>
+        <option value="fr-FR">French</option>
+    </select>
+    <button id="toggleButton" onclick="toggleRecording()">Start Recording</button>
+    <div id="output"></div>
+    <script>
+        let ws;
+        let mediaRecorder;
+        let isRecording = false;
+
+        const buttonTitles = {
+            "en-US": { start: "Start Recording", stop: "Stop Recording" },
+            "fr-FR": { start: "Commencer l'enregistrement", stop: "Arrêter l'enregistrement" },
+        };
+
+        function startRecording() {
+            const language = document.getElementById("language").value;
+            ws = new WebSocket(`ws://localhost:8000/ws/${language}`);
+            
+            ws.onmessage = function(event) {
+                const outputDiv = document.getElementById("output");
+                outputDiv.innerText += event.data + "\n";
+            };
+
+            ws.onopen = function() {
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+
+                    // if (!MediaRecorder.isTypeSupported('audio/ogg')) return alert('Browser not supported')
+                    // const options = {
+                    //     audioBitsPerSecond: 128000,
+                    //     videoBitsPerSecond: 2500000,
+                    //     mimeType: "video/mp4",
+                    // };
+                    const mediaRecorder = new MediaRecorder(stream)
+                    mediaRecorder.start(500);  // Collect 250ms chunks
+                    mediaRecorder.ondataavailable = function(event) {
+                        if (event.data.size > 0) {
+                            ws.send(event.data);
+                            console.log(mediaRecorder.mimeType)
+                        }
+                    };
+
+                    mediaRecorder.onstop = function() {
+                        ws.close();
+                    };
+                }).catch(error => {
+                    console.error("Error accessing microphone: ", error);
+                });
+            };
+
+            ws.onclose = function(event) {
+                console.log(`WebSocket closed: ${event.code}, ${event.reason}`);
+            };
+
+            ws.onerror = function(event) {
+                console.error(`WebSocket error: ${event}`);
+            };
+        }
+
+        function stopRecording() {
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+            }
+        }
+
+        function toggleRecording() {
+            const button = document.getElementById("toggleButton");
+            const language = document.getElementById("language").value;
+            const titles = buttonTitles[language];
+
+            if (isRecording) {
+                stopRecording();
+                button.innerText = titles.start;
+            } else {
+                startRecording();
+                button.innerText = titles.stop;
+            }
+            isRecording = !isRecording;
+        }
+
+        function updateButtonLanguage() {
+            const button = document.getElementById("toggleButton");
+            const language = document.getElementById("language").value;
+            const titles = buttonTitles[language];
+            button.innerText = isRecording ? titles.stop : titles.start;
+        }
+    </script>
+</body>
+</html>
